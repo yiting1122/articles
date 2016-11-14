@@ -1,3 +1,78 @@
+# zk结构
+
+ZooKeeper是一个开源的分布式服务框架，它是Apache Hadoop项目的一个子项目，主要用来解决分布式应用场景中存在的一些问题，如：统一命名服务、状态同步服务、集群管理、分布式应用配置管理等，它支持Standalone模式和分布式模式，在分布式模式下，能够为分布式应用提供高性能和可靠地协调服务，而且使用ZooKeeper可以大大简化分布式协调服务的实现，为开发分布式应用极大地降低了成本。 
+
+![](/assets/zkservice.jpg)
+
+ZooKeeper集群由一组Server节点组成，这一组Server节点中存在一个角色为Leader的节点，其他节点都为Follower。当客户端Client连接到ZooKeeper集群，并且执行写请求时，这些请求会被发送到Leader节点上，然后Leader节点上数据变更会同步到集群中其他的Follower节点。
+
+ Leader节点在接收到数据变更请求后，首先将变更写入本地磁盘，以作恢复之用。当所有的写请求持久化到磁盘以后，才会将变更应用到内存中。
+
+ ZooKeeper使用了一种自定义的原子消息协议，在消息层的这种原子特性，保证了整个协调系统中的节点数据或状态的一致性。Follower基于这种消息协议能够保证本地的ZooKeeper数据与Leader节点同步，然后基于本地的存储来独立地对外提供服务。
+
+ 当一个Leader节点发生故障失效时，失败故障是快速响应的，消息层负责重新选择一个Leader，继续作为协调服务集群的中心，处理客户端写请求，并将ZooKeeper协调系统的数据变更同步（广播）到其他的Follower节点。
+
+
+
+# 数据模型
+
+ZooKeeper有一个分层的命名空间，结构类似文件系统的目录结构，非常简单而直观。其中，ZNode是最重要的概念，前面我们已经描述过。另外，有ZNode有关的还包括Watches、ACL、临时节点、序列节点（Sequence Node）。 
+
+  ZNode结构
+
+ZooKeeper中使用Zxid（ZooKeeper Transaction Id）来表示每次节点数据变更，一个Zxid与一个时间戳对应，所以多个不同的变更对应的事务是有序的。下面是ZNode的组成结构，引用文档如下所示：
+
+* czxid – The zxid of the change that caused this znode to be created.
+* mzxid – The zxid of the change that last modified this znode.
+* ctime – The time in milliseconds from epoch when this znode was created.
+* mtime – The time in milliseconds from epoch when this znode was last modified.
+* version – The number of changes to the data of this znode.
+* cversion – The number of changes to the children of this znode.
+* aversion – The number of changes to the ACL of this znode.
+* ephemeralOwner – The session id of the owner of this znode if the znode is an ephemeral node. If it is not an ephemeral node, it will be zero.
+* dataLength – The length of the data field of this znode.
+* numChildren – The number of children of this znode.
+
+   **Watches监测**
+
+ZooKeeper中的Watch是只能触发一次。也就是说，如果客户端在指定的ZNode设置了Watch，如果该ZNode数据发生变更，ZooKeeper会发送一个变更通知给客户端，同时触发设置的Watch事件。如果ZNode数据又发生了变更，客户端在收到第一次通知后没有重新设置该ZNode的Watch，则ZooKeeper就不会发送一个变更通知给客户端。
+
+ ZooKeeper异步通知设置Watch的客户端。但是ZooKeeper能够保证在ZNode的变更生效之后才会异步地通知客户端，然后客户端才能够看到ZNode的数据变更。由于网络延迟，多个客户端可能会在不同的时间看到ZNode数据的变更，但是看到变更的顺序是能够保证有序一致的。
+
+ ZNode可以设置两类Watch，一个是Data Watches（该ZNode的数据变更导致触发Watch事件），另一个是Child Watches（该ZNode的孩子节点发生变更导致触发Watch事件）。调用getData\(\)和exists\(\) 方法可以设置Data Watches，调用getChildren\(\)方法可以设置Child Watches。调用setData\(\)方法触发在该ZNode的注册的Data Watches。调用create\(\)方法创建一个ZNode，将触发该ZNode的Data Watches；调用create\(\)方法创建ZNode的孩子节点，则触发ZNode的Child Watches。调用delete\(\)方法删除ZNode，则同时触发Data Watches和Child Watches，如果该被删除的ZNode还有父节点，则父节点触发一个Child Watches。
+
+ 另外，如果客户端与ZooKeeper Server断开连接，客户端就无法触发Watches，除非再次与ZooKeeper Server建立连接。 
+
+
+
+**Sequence Nodes（序列节点）** 
+
+在创建ZNode的时候，可以请求ZooKeeper生成序列，以路径名为前缀，计数器紧接在路径名后面，例如，会生成类似如下形式序列：
+
+| `1` | `qn-0000000001, qn-0000000002, qn-0000000003, qn-0000000004, qn-0000000005, qn-0000000006, qn-0000000007` |
+| --- | --- |
+
+对于ZNode的父节点来说，序列中的每个计数器字符串都是唯一的，最大值为2147483647。
+
+**ACLs（访问控制列表）** 
+
+ACL可以控制访问ZooKeeper的节点，只能应用于特定的ZNode上，而不能应用于该ZNode的所有孩子节点上。它主要有如下五种权限：
+
+* CREATE 允许创建Child Nodes
+* READ 允许获取ZNode的数据，以及该节点的孩子列表
+* WRITE 可以修改ZNode的数据
+* DELETE 可以删除一个孩子节点
+* ADMIN 可以设置权限
+
+ZooKeeper内置了4种方式实现ACL：
+
+* world 一个单独的ID，表示任何人都可以访问
+* auth 不使用ID，只有认证的用户可以访问
+* digest 使用username:password生成MD5哈希值作为认证ID
+* ip 使用客户端主机IP地址来进行认证
+
+ 
+
 # Zookeeper服务注册与发现：
 
 ## 服务化背景
@@ -62,11 +137,7 @@ Zookeeper作为服务注册和发现的解决方案，其优点如下：
 
 
 
-
-
-
-
-
+# zk分布式索
 
 
 

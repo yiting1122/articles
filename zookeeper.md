@@ -136,7 +136,7 @@ Zookeeper作为服务注册和发现的解决方案，其优点如下：
 
 2. 希望获得锁的客户端在锁目录下创建znode，作为锁\/lock\_node的子节点，并且节点类型为有序临时节点\(EPHEMERAL\_SEQUENTIAL\)；
 
- 例如：有两个客户端创建znode，分别为\/lock\_node\/lock-1和\/lock\_node\/lock-2
+  例如：有两个客户端创建znode，分别为\/lock\_node\/lock-1和\/lock\_node\/lock-2
 
 3. 当前客户端调用getChildren（\/lock\_node）得到锁目录所有子节点，不设置watch，接着获取小于自己\(步骤2创建\)的兄弟节点
 
@@ -145,4 +145,29 @@ Zookeeper作为服务注册和发现的解决方案，其优点如下：
 5. 客户端监视\(watch\)相对自己次小的有序临时节点状态
 
 6. 如果监视的次小节点状态发生变化，则跳转到步骤3，继续后续操作，直到退出锁竞争。
+
+
+# zk投票协议
+
+ZooKeeper为高可用的一致性协调框架，自然的ZooKeeper也有着一致性算法的实现，ZooKeeper使用的是ZAB协议作为数据一致性的算法，**ZAB（ZooKeeper Atomic Broadcast ）**全称为：原子消息广播协议；ZAB可以说是在Paxos算法基础上进行了扩展改造而来的，ZAB协议设计了支持崩溃恢复，ZooKeeper使用单一主进程Leader用于处理客户端所有事务请求，采用ZAB协议将服务器数状态以事务形式广播到所有Follower上；由于事务间可能存在着依赖关系，ZAB协议保证Leader广播的变更序列被顺序的处理，：一个状态被处理那么它所依赖的状态也已经提前被处理；ZAB协议支持的崩溃恢复可以保证在Leader进程崩溃的时候可以重新选出Leader并且保证数据的完整性；
+
+ 在ZooKeeper中所有的事务请求都由一个主服务器也就是Leader来处理，其他服务器为Follower，Leader将客户端的事务请求转换为事务Proposal，并且将Proposal分发给集群中其他所有的Follower，然后Leader等待Follwer反馈，当有**过半数（&gt;=N\/2+1）**的Follower反馈信息后，Leader将再次向集群内Follower广播Commit信息，Commit为将之前的Proposal提交； 
+
+**协议状态**
+
+ ZAB协议中存在着三种状态，每个节点都属于以下三种中的一种：
+
+ 1. **Looking**：系统刚启动时或者Leader崩溃后正处于选举状态
+
+ 2. **Following**：Follower节点所处的状态，Follower与Leader处于数据同步阶段；
+
+ 3. **Leading**：Leader所处状态，当前集群中有一个Leader为主进程；
+
+ ZooKeeper启动时所有节点初始状态为Looking，这时集群会尝试选举出一个Leader节点，选举出的Leader节点切换为Leading状态；当节点发现集群中已经选举出Leader则该节点会切换到Following状态，然后和Leader节点保持同步；当Follower节点与Leader失去联系时Follower节点则会切换到Looking状态，开始新一轮选举；在ZooKeeper的整个生命周期中每个节点都会在Looking、Following、Leading状态间不断转换；
+
+
+
+![](/assets/160326110824491.png)
+
+
 

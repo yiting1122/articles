@@ -41,3 +41,22 @@ public static final String SELECT_FOR_LOCK = "SELECT * FROM "
 
 当线程使用上述的SQL对表中的数据执行操作时，数据库对该行进行行加锁； 于此同时， 另一个线程对该行数据执行操作前需要获取锁， 而此时已被占用， 那么这个线程就只能等待， 直到该行锁被释放。
 
+
+
+# quartz核心
+
+对于个人，对作业调度的感知不是非常明确，但对于一个企业，一个好的作业调度可以为企业节省很多时间和金钱。类图如下：
+
+![](/assets/990039c2-70e7-308a-871e-30b4b003672c.png)
+
+
+
+1. job类，这个类，非常简单，只有一个execute方法 
+2. jobdetail类，该类是对具体job类的封装，包括jobName\(id\)，job执行需要的运行时参数，在名为jobdata的hashMap中 
+3. trigger类，记录下次运行作业的时间和运行job的key 
+4. scheduler类，最重要的类，用来启动和停止框架 ， scheduler的执行是在scheduler的schedulerThread中执行；线程中最重要的是run方法体，另外还有一个halt方法用来停止线程 
+
+
+
+
+

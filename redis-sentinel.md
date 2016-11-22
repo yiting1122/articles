@@ -338,25 +338,111 @@ TILT 模式是一种特殊的保护模式： 当 Sentinel 发现系统有些不�
 
 当出现这种情况时， Sentinel 在尝试执行故障转移操作之前， 会先向服务器发送一个 SCRIPT KILL 命令， 如果服务器正在执行的是一个只读脚本的话， 那么这个脚本就会被杀死， 服务器就会回到正常状态。
 
-
-
 **Sentinel Leader选举:**
 
- 其实在sentinels故障转移中，仍然需要一个“Leader”来调度整个过程：master的选举以及slave的重配置和同步。当集群中有多个sentinel实例时，如何选举其中一个sentinel为leader呢？
+其实在sentinels故障转移中，仍然需要一个“Leader”来调度整个过程：master的选举以及slave的重配置和同步。当集群中有多个sentinel实例时，如何选举其中一个sentinel为leader呢？
 
- 在配置文件中“can-failover”“quorum”参数，以及“is-master-down-by-addr”指令配合来完成整个过程。
+在配置文件中“can-failover”“quorum”参数，以及“is-master-down-by-addr”指令配合来完成整个过程。
 
- A\) “can-failover”用来表明当前sentinel是否可以参与“failover”过程，如果为“YES”则表明它将有能力参与“Leader”的选举，否则它将作为“Observer”，observer参与leader选举投票但不能被选举；
+A\) “can-failover”用来表明当前sentinel是否可以参与“failover”过程，如果为“YES”则表明它将有能力参与“Leader”的选举，否则它将作为“Observer”，observer参与leader选举投票但不能被选举；
 
- B\) “quorum”不仅用来控制master ODOWN状态确认，同时还用来选举leader时最小“赞同票”数；
+B\) “quorum”不仅用来控制master ODOWN状态确认，同时还用来选举leader时最小“赞同票”数；
 
- C\) “is-master-down-by-addr”，在上文中以及提到，它可以用来检测“ip + port”的master是否已经处于SDOWN状态，不过此指令不仅能够获得master是否处于SDOWN，同时它还额外的返回当前sentinel本地“投票选举”的Leader信息\(runid\);
+C\) “is-master-down-by-addr”，在上文中以及提到，它可以用来检测“ip + port”的master是否已经处于SDOWN状态，不过此指令不仅能够获得master是否处于SDOWN，同时它还额外的返回当前sentinel本地“投票选举”的Leader信息\(runid\);
 
- 每个sentinel实例都持有其他的sentinels信息，在Leader选举过程中\(当为leader的sentinel实例失效时，有可能master server并没失效，注意分开理解\)，sentinel实例将从所有的sentinels集合中去除“can-failover = no”和状态为SDOWN的sentinels，在剩余的sentinels列表中按照runid按照“字典”顺序排序后，取出runid最小的sentinel实例，并将它“投票选举”为Leader，并在其他sentinel发送的“is-master-down-by-addr”指令时将推选的runid追加到响应中。每个sentinel实例都会检测“is-master-down-by-addr”的响应结果，如果“投票选举”的leader为自己，且状态正常的sentinels实例中，“赞同者”的自己的sentinel个数不小于\(&gt;=\) 50% + 1,且不小与&lt;quorum&gt;，那么此sentinel就会认为选举成功且leader为自己。
+每个sentinel实例都持有其他的sentinels信息，在Leader选举过程中\(当为leader的sentinel实例失效时，有可能master server并没失效，注意分开理解\)，sentinel实例将从所有的sentinels集合中去除“can-failover = no”和状态为SDOWN的sentinels，在剩余的sentinels列表中按照runid按照“字典”顺序排序后，取出runid最小的sentinel实例，并将它“投票选举”为Leader，并在其他sentinel发送的“is-master-down-by-addr”指令时将推选的runid追加到响应中。每个sentinel实例都会检测“is-master-down-by-addr”的响应结果，如果“投票选举”的leader为自己，且状态正常的sentinels实例中，“赞同者”的自己的sentinel个数不小于\(&gt;=\) 50% + 1,且不小与&lt;quorum&gt;，那么此sentinel就会认为选举成功且leader为自己。
 
- 在sentinel.conf文件中，我们期望有足够多的sentinel实例配置“can-failover yes”，这样能够确保当leader失效时，能够选举某个sentinel为leader，以便进行failover。如果leader无法产生，比如较少的sentinels实例有效，那么failover过程将无法继续。
+在sentinel.conf文件中，我们期望有足够多的sentinel实例配置“can-failover yes”，这样能够确保当leader失效时，能够选举某个sentinel为leader，以便进行failover。如果leader无法产生，比如较少的sentinels实例有效，那么failover过程将无法继续。
+
+**在Redis-Sentinel的client-reconfig-script脚本中设置VIP**
+
+VIP设置脚本
+
+这个是在failover时执行的脚本。
+
+如下所示的参数会传递给脚本client-reconfig-script。
+
+\# The following arguments are passed to the script:
+
+\#
+
+\# &lt;master-name&gt; &lt;role&gt; &lt;state&gt; &lt;from-ip&gt; &lt;from-port&gt; &lt;to-ip&gt; &lt;to-port&gt;
+
+第6个增加VIP，将成为一个Master，其它的则删除VIP。在failover时，仅仅使用ip命令可能会产生arp问题，因此使用arping命令来抛出GRAP。在使用ip、arping命令时需要root权限，这里使用sudo来执行命令。
+
+vim \/var\/lib\/redis\/failover.sh
+
+chmod 755 \/var\/lib\/redis\/failover.sh
+
+chown redis: \/var\/lib\/redis\/failover.sh
+
+echo -e "redis\tALL=\(ALL\)\tNOPASSWD:\/sbin\/ip,NOPASSWD:\/sbin\/arping" &gt; \/etc\/sudoers.d\/redis
+
+sed -i "s\|Defaults.\*requiretty\|\#Defaults\trequiretty\|" \/etc\/sudoers
+
+chmod 440 \/etc\/sudoers.d\/redis
+
+\#!\/bin\/bash
+
+MASTER\_IP=${6}
+
+MY\_IP='192.168.0.1' \# 每个Server本身的IP
+
+VIP='192.168.0.4' \# VIP
+
+NETMASK='24' \# Netmask
+
+INTERFACE='eth0' \# 接口
+
+if \[ ${MASTER\_IP} = ${MY\_IP} \]; then
+
+ sudo \/sbin\/ip addr add ${VIP}\/${NETMASK} dev ${INTERFACE}
+
+ sudo \/sbin\/arping -q -c 3 -A ${VIP} -I ${INTERFACE}
+
+ exit 0
+
+else
+
+ sudo \/sbin\/ip addr del ${VIP}\/${NETMASK} dev ${INTERFACE}
+
+ exit 0
+
+fi
+
+exit 1
+
+Redis-Sentinel设置
+
+开始设置redis-sentonel。
+
+你只需在第一次手工设置VIP。
+
+vim \/etc\/redis-sentinel.conf
+
+service redis-sentinel start
+
+chkconfig redis-sentinel on
+
+ip addr add 192.168.0.4\/24 dev eth0
+
+\# sentinel.conf
+
+port 26379
+
+logfile \/var\/log\/redis\/sentinel.log
+
+sentinel monitor mymaster 192.168.0.1 6379 2
+
+sentinel down-after-milliseconds mymaster 3000
+
+sentinel parallel-syncs mymaster 1
+
+sentinel failover-timeout mymaster 60000
+
+sentinel client-reconfig-script mymaster \/var\/lib\/redis\/failover.sh
 
 
 
-
+# 
 

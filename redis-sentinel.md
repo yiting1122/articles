@@ -396,17 +396,17 @@ INTERFACE='eth0' \# 接口
 
 if \[ ${MASTER\_IP} = ${MY\_IP} \]; then
 
- sudo \/sbin\/ip addr add ${VIP}\/${NETMASK} dev ${INTERFACE}
+sudo \/sbin\/ip addr add ${VIP}\/${NETMASK} dev ${INTERFACE}
 
- sudo \/sbin\/arping -q -c 3 -A ${VIP} -I ${INTERFACE}
+sudo \/sbin\/arping -q -c 3 -A ${VIP} -I ${INTERFACE}
 
- exit 0
+exit 0
 
 else
 
- sudo \/sbin\/ip addr del ${VIP}\/${NETMASK} dev ${INTERFACE}
+sudo \/sbin\/ip addr del ${VIP}\/${NETMASK} dev ${INTERFACE}
 
- exit 0
+exit 0
 
 fi
 
@@ -441,6 +441,22 @@ sentinel parallel-syncs mymaster 1
 sentinel failover-timeout mymaster 60000
 
 sentinel client-reconfig-script mymaster \/var\/lib\/redis\/failover.sh
+
+
+
+# Sentinel配置
+
+port 26379
+
+sentinel monitor mymaster 10.180.156.40 6379 2
+
+sentinel failover-timeout mymaster 900000
+
+sentinel auth-pass mymaster redispass
+
+sentinel down-after-milliseconds mymaster 30000i
+
+sentinel parallel-syncs mymaster 1
 
 
 

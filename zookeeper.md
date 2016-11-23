@@ -2,25 +2,21 @@
 
 ZooKeeper是一个开源的分布式服务框架，它是Apache Hadoop项目的一个子项目，主要用来解决分布式应用场景中存在的一些问题，如：统一命名服务、状态同步服务、集群管理、分布式应用配置管理等，它支持Standalone模式和分布式模式，在分布式模式下，能够为分布式应用提供高性能和可靠地协调服务，而且使用ZooKeeper可以大大简化分布式协调服务的实现，为开发分布式应用极大地降低了成本。
 
-
-
 zk是一个用于管理大量主机的分布式协调服务，在分布式环境下协调和管理一个服务是非常复杂的流程。而zk释放了开发者的压力，无需担心分布式环境下的复杂性，而只需要关注业务中的逻辑实现。zk框架是由雅虎提出，后续被apache录入，被hadoop，hbase等其他分布式框架使用，Hbase使用zk来跟踪数据的状态。
 
 zk提供的服务主要包括：
 
- （名字空间服务） naming service，通过名称可以确定一个node
+（名字空间服务） naming service，通过名称可以确定一个node
 
- （配置管理服务） 可以管理最新的node和最新的配置信息（node加入，配置信息更新）
+（配置管理服务） 可以管理最新的node和最新的配置信息（node加入，配置信息更新）
 
- （集群管理） 实时管理集群中node的上下线以及节点状态
+（集群管理） 实时管理集群中node的上下线以及节点状态
 
- （leader选举）node的leader选举
+（leader选举）node的leader选举
 
- （锁服务） 在修改数据的时候可以进行锁定，保证并发安全。
+（锁服务） 在修改数据的时候可以进行锁定，保证并发安全。
 
 # zk结构
-
-
 
 ![](/assets/zkservice.jpg)
 
@@ -34,7 +30,7 @@ ZooKeeper使用了一种自定义的原子消息协议，在消息层的这种�
 
 # 数据模型
 
-ZooKeeper有一个分层的命名空间，结构类似文件系统的目录结构，非常简单而直观。其中，ZNode是最重要的概念，前面我们已经描述过。另外，有ZNode有关的还包括Watches、ACL、临时节点、序列节点（Sequence Node）。
+ZooKeeper有一个分层的命名空间，结构类似文件系统的目录结构，非常简单而直观。其中，ZNode是最重要的概念。另外，有ZNode有关的还包括Watches、ACL、临时节点、序列节点（Sequence Node）。
 
 **ZNode结构**
 
@@ -51,10 +47,7 @@ ZooKeeper中使用Zxid（ZooKeeper Transaction Id）来表示每次节点数据�
 * dataLength – The length of the data field of this znode.
 * numChildren – The number of children of this znode.
 
-
-
-  **Watches监测**
-
+**Watches监测**
 
 ZooKeeper中的Watch是只能触发一次。也就是说，如果客户端在指定的ZNode设置了Watch，如果该ZNode数据发生变更，ZooKeeper会发送一个变更通知给客户端，同时触发设置的Watch事件。如果ZNode数据又发生了变更，客户端在收到第一次通知后没有重新设置该ZNode的Watch，则ZooKeeper就不会发送一个变更通知给客户端。
 
@@ -188,5 +181,34 @@ ZAB协议中存在着三种状态，每个节点都属于以下三种中的一�
   ZooKeeper启动时所有节点初始状态为Looking，这时集群会尝试选举出一个Leader节点，选举出的Leader节点切换为Leading状态；当节点发现集群中已经选举出Leader则该节点会切换到Following状态，然后和Leader节点保持同步；当Follower节点与Leader失去联系时Follower节点则会切换到Looking状态，开始新一轮选举；在ZooKeeper的整个生命周期中每个节点都会在Looking、Following、Leading状态间不断转换；
 
 
-![](/assets/160326110824491.png)
+
+![](assets/160326110824491.png)
+
+
+
+
+
+# Zk处理读写请求
+
+Leader节点处理读写请求，Follower节点处理读请求
+
+![](/assets/20130902214958015.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
